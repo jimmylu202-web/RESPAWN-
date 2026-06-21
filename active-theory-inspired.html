@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RESPAWN Spatial Cards Demo</title>
+<style>
+  :root {
+    --green: #9AB928;
+    --blue: #1d6bff;
+    --ink: #030604;
+    --mx: 0;
+    --my: 0;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--ink);
+    color: #e9ffd2;
+    font-family: "Microsoft YaHei", "PingFang SC", "Arial", sans-serif;
+  }
+
+  body {
+    cursor: crosshair;
+  }
+
+  .scene {
+    position: fixed;
+    inset: 0;
+    perspective: 1300px;
+    background:
+      radial-gradient(circle at calc(48% + var(--mx) * 18%) calc(42% + var(--my) * 18%), rgba(154, 185, 40, 0.17), transparent 30%),
+      radial-gradient(circle at 72% 52%, rgba(29, 107, 255, 0.16), transparent 34%),
+      linear-gradient(125deg, #07100a 0%, #020403 48%, #07110d 100%);
+    isolation: isolate;
+  }
+
+  .scene::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgba(154, 185, 40, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(154, 185, 40, 0.04) 1px, transparent 1px);
+    background-size: 54px 54px;
+    opacity: 0.42;
+    transform: translate3d(calc(var(--mx) * -18px), calc(var(--my) * -18px), 0);
+    mask-image: radial-gradient(circle at center, black, transparent 76%);
+  }
+
+  .scene::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px),
+      radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.56) 100%);
+    mix-blend-mode: screen;
+    opacity: 0.24;
+  }
+
+  #particleField {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+  }
+
+  .hud-nav {
+    position: fixed;
+    top: 36px;
+    right: 42px;
+    z-index: 30;
+    display: flex;
+    gap: 26px;
+    align-items: center;
+    min-width: 272px;
+    padding: 15px 25px;
+    border: 1px solid rgba(154, 185, 40, 0.48);
+    border-radius: 999px;
+    background: rgba(2, 6, 5, 0.52);
+    box-shadow: 0 0 34px rgba(154, 185, 40, 0.2);
+    backdrop-filter: blur(18px);
+    color: #d7f5b4;
+    letter-spacing: 0.08em;
+    font-family: "Consolas", "Courier New", monospace;
+  }
+
+  .hud-nav a {
+    color: inherit;
+    text-decoration: none;
+    font-size: 14px;
+  }
+
+  .hud-nav i {
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+  }
+
+  .deck {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    transform-style: preserve-3d;
+    transform:
+      rotateX(calc(var(--my) * -3deg))
+      rotateY(calc(var(--mx) * 5deg))
+      translate3d(calc(var(--mx) * -14px), calc(var(--my) * -10px), 0);
+    transition: transform 120ms ease-out;
+  }
+
+  .card {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(58vw, 760px);
+    min-height: min(56vh, 560px);
+    overflow: hidden;
+    border: 1px solid rgba(216, 245, 196, 0.25);
+    border-radius: 36px;
+    background:
+      linear-gradient(135deg, rgba(154,185,40,0.12), rgba(29,107,255,0.04)),
+      rgba(180, 210, 150, 0.06);
+    box-shadow:
+      0 34px 80px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+      0 0 44px rgba(154, 185, 40, 0.1);
+    backdrop-filter: blur(16px) saturate(1.25);
+    transform:
+      translate(-50%, -50%)
+      translate3d(var(--x), var(--y), var(--z))
+      scale(var(--scale))
+      rotateY(var(--rotate-y))
+      rotateX(var(--rotate-x));
+    opacity: var(--opacity);
+    filter: blur(var(--blur)) brightness(var(--brightness));
+    z-index: var(--z-index);
+    transform-style: preserve-3d;
+    will-change: transform, opacity, filter;
+    transition:
+      transform 760ms cubic-bezier(.16, .84, .18, 1),
+      opacity 520ms ease,
+      filter 520ms ease,
+      border-color 520ms ease,
+      box-shadow 520ms ease;
+  }
+
+  .card.is-active {
+    border-color: rgba(154, 185, 40, 0.76);
+    box-shadow:
+      0 40px 96px rgba(0, 0, 0, 0.62),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 68px rgba(154, 185, 40, 0.24);
+  }
+
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    background:
+      linear-gradient(105deg, rgba(255, 255, 255, 0.18), transparent 28% 66%, rgba(154, 185, 40, 0.12)),
+      repeating-linear-gradient(0deg, transparent 0 8px, rgba(255,255,255,0.035) 8px 9px);
+    mix-blend-mode: screen;
+    pointer-events: none;
+  }
+
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: -24%;
+    z-index: 5;
+    opacity: 0.24;
+    background: conic-gradient(from 110deg, transparent, rgba(154, 185, 40, 0.32), rgba(29, 107, 255, 0.25), transparent);
+    filter: blur(22px);
+    animation: orbitalGlow 9s linear infinite;
+    pointer-events: none;
+  }
+
+  .card-media {
+    position: relative;
+    height: min(33vh, 320px);
+    overflow: hidden;
+    background: rgba(2, 6, 4, 0.62);
+  }
+
+  .card-media img,
+  .card-media video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    opacity: 0.82;
+    filter: contrast(1.08) saturate(1.15) brightness(0.82);
+  }
+
+  .card-body {
+    position: relative;
+    z-index: 7;
+    padding: 30px 34px 34px;
+    font-family: "Consolas", "Courier New", monospace;
+  }
+
+  .card-body small {
+    display: block;
+    margin-bottom: 14px;
+    color: var(--green);
+    letter-spacing: 0.12em;
+  }
+
+  .card-body h2 {
+    margin: 0;
+    color: rgba(247, 255, 234, 0.92);
+    font-size: clamp(30px, 4.6vw, 72px);
+    line-height: 0.95;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-shadow:
+      2px 0 rgba(29, 107, 255, 0.9),
+      -2px 0 rgba(154, 185, 40, 0.68),
+      0 0 28px rgba(255, 255, 255, 0.25);
+  }
+
+  .card-body p {
+    max-width: 620px;
+    margin: 18px 0 0;
+    color: rgba(234, 255, 212, 0.76);
+    font-size: 15px;
+    line-height: 1.85;
+  }
+
+  .copy {
+    position: fixed;
+    left: clamp(24px, 4vw, 72px);
+    bottom: clamp(32px, 6vh, 78px);
+    z-index: 32;
+    width: min(430px, calc(100vw - 48px));
+    color: rgba(237, 255, 214, 0.82);
+    font-family: "Consolas", "Courier New", monospace;
+    text-shadow: 0 0 18px rgba(154, 185, 40, 0.22);
+  }
+
+  .copy p {
+    margin: 0 0 11px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .progress-readout {
+    display: grid;
+    grid-template-columns: auto minmax(118px, 210px) auto;
+    gap: 14px;
+    align-items: center;
+    margin-top: 18px;
+    color: rgba(235, 255, 210, 0.78);
+    font-size: 13px;
+    letter-spacing: 0.12em;
+  }
+
+  .progress-readout .track {
+    height: 2px;
+    background: rgba(154, 185, 40, 0.18);
+  }
+
+  .progress-readout .bar {
+    width: calc(var(--progress) * 100%);
+    height: 100%;
+    background: var(--green);
+    box-shadow: 0 0 18px rgba(154, 185, 40, 0.7);
+    transition: width 420ms ease;
+  }
+
+  .spine {
+    position: absolute;
+    left: 49%;
+    top: 5vh;
+    z-index: 2;
+    width: 140px;
+    height: 90vh;
+    opacity: 0.52;
+    filter: drop-shadow(0 0 28px rgba(154, 185, 40, 0.18));
+    transform:
+      translateZ(20px)
+      rotateZ(-8deg)
+      translate3d(calc(var(--mx) * 34px), calc(var(--my) * 18px), 0);
+  }
+
+  .spine span {
+    position: absolute;
+    left: 50%;
+    width: 78px;
+    height: 28px;
+    border: 1px solid rgba(154, 185, 40, 0.55);
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 35%, rgba(255,255,255,0.28), transparent 28%),
+      linear-gradient(135deg, rgba(154, 185, 40, 0.35), rgba(29, 107, 255, 0.13));
+    box-shadow: inset 0 0 18px rgba(29, 107, 255, 0.2);
+    transform: translateX(-50%) rotateX(62deg) rotateZ(calc(var(--i) * 13deg));
+  }
+
+  .noise {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0.08;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: screen;
+  }
+
+  @keyframes orbitalGlow {
+    to { transform: rotate(1turn); }
+  }
+
+  @media (max-width: 780px) {
+    .hud-nav {
+      left: 18px;
+      right: 18px;
+      top: 18px;
+      min-width: 0;
+    }
+
+    .card {
+      width: min(88vw, 500px);
+      min-height: 0;
+      border-radius: 26px;
+    }
+
+    .card-media {
+      height: 210px;
+    }
+
+    .card-body {
+      padding: 24px;
+    }
+
+    .card-body p,
+    .copy p,
+    .spine {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="scene" aria-label="RESPAWN 玻璃拟态滚轮卡片实验页">
+  <canvas id="particleField" aria-hidden="true"></canvas>
+  <nav class="hud-nav" aria-label="演示导航">
+    <a href="active-theory-inspired.html">WORK</a>
+    <i></i>
+    <a href="brand-story.html">HOME</a>
+  </nav>
+
+  <div class="spine" aria-hidden="true">
+    <span style="--i:1; top: 4%"></span>
+    <span style="--i:2; top: 12%"></span>
+    <span style="--i:3; top: 20%"></span>
+    <span style="--i:4; top: 28%"></span>
+    <span style="--i:5; top: 36%"></span>
+    <span style="--i:6; top: 44%"></span>
+    <span style="--i:7; top: 52%"></span>
+    <span style="--i:8; top: 60%"></span>
+    <span style="--i:9; top: 68%"></span>
+    <span style="--i:10; top: 76%"></span>
+    <span style="--i:11; top: 84%"></span>
+  </div>
+
+  <section class="deck" id="cardsDeck" aria-live="polite"></section>
+
+  <aside class="copy">
+    <p>核心产品：“深夜过载”高浓度咖啡包（或者是能量茶饮）</p>
+    <p>市面上的咖啡包装都太“温和”了。RESPAWN要打破常规，把咖啡包装伪装成“赛博世界里的高能电池”或“科幻电影里的肾上腺素针剂盒”。</p>
+    <div class="progress-readout" style="--progress: .125">
+      <span id="currentCard">01</span>
+      <div class="track"><div class="bar"></div></div>
+      <span id="totalCards">08</span>
+    </div>
+  </aside>
+  <div class="noise" aria-hidden="true"></div>
+</main>
+<script src="main.js"></script>
+</body>
+</html>
